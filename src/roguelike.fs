@@ -119,7 +119,7 @@ type Exit (x:int, y:int) =
     inherit Item(x, y, true)
     override this.InteractWith (player:Player) = printfn "You Escaped! Well Done!"
 
-    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.B)
+    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.Black)
     
 
 
