@@ -1,8 +1,9 @@
 module roguelike
 
 type Color = System.ConsoleColor
-type Point (c:System.Char,fg:Color,bg:Color) = 
-    member val Point = (c,fg,bg) with get, set
+
+
+
 
 
 ///<summary> Function to print show a given point in the console </summary>
@@ -39,22 +40,6 @@ type Canvas(rows:int,cols:int) =
             for x in [0..this.Rows-1] do 
                 PrintPoint (Array2D.get xy x y)
         System.Console.ResetColor()
-
-///// A Position in 2d space
-//type Position(x: int, y: int) =
-//    /// Read and writeable x/y components
-//    member val X = x with get, set
-//    member val Y = y with get, set
-
-//    /// <summary> Creates a new position with identical components. </summary>
-//    /// <returns> The copy. </returns>
-//    member this.Clone (): Position =
-//        Position (this.X, this.Y)
-
-//    /// <summary> Debug ToString function. </summary>
-//    /// <returns> A human readable string representation of the vector. </returns>
-//    override this.ToString () : string =
-//        sprintf "Position(%A, %A)" (this.X) (this.Y)
 
 [<AbstractClass>]
 type Entity(x:int, y:int) =
@@ -93,14 +78,20 @@ type Item (x: int, y: int, occupie:bool) =
     inherit Entity (x,y)
     override this.RenderOn(canvas:Canvas) = ()
 
+    abstract isExit: unit -> bool
+    default this.isExit () = false
+
     abstract member Empty: unit -> bool
     default this.Empty() = false
 
     abstract member ReplaceAfterInteract: unit -> bool
     default this.ReplaceAfterInteract() = false
 
+    member this.MoveTo(x:int,y:int) = this.Position <- (x,y)
+
     abstract member InteractWith : Player -> unit
     default this.InteractWith (player:Player) = ()
+    
     member this.FullyOccupy() : bool = occupie
 
 type Wall (x:int, y:int) =
@@ -124,21 +115,43 @@ type FleshEatingPlant (x:int, y:int) =
         player.Damage 5
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.DarkGreen)
 
+type Zombie (x:int, y:int) = 
+    inherit Item(x, y, true)
+    override this.ReplaceAfterInteract() = true
+    override this.InteractWith (player:Player) = 
+        player.Damage 5
+    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'Z',Color.Green, Color.Gray)
+
+
 type Exit (x:int, y:int) = 
     inherit Item(x, y, false)
+    override this.isExit () = true
     override this.InteractWith (player:Player) = ()
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.Black)
 
-type Empty() = 
-    inherit Item(1,1, false)
+type Empty(x:int,y:int) = 
+    inherit Item(x,y, false)
     override this.Empty() = true
     override this.InteractWith (player:Player) = ()
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.White)
 
+
+//Virker ikke som det skal
+//Switch posistion in level
+let switch (item1:Item) (item2:Item) (arr2D) =
+    //move position internally
+    item1.MoveTo(item2.X, item2.Y)
+    item2.MoveTo(item1.X, item1.Y)
+    //move posistion in Arr
+    let placeholder = (Array2D.get arr2D item1.X item1.Y)
+    Array2D.set arr2D item1.X item1.X (Array2D.get arr2D item2.X item2.Y)
+    Array2D.set arr2D item2.X item2.Y (placeholder)
+
 type World (length:int,height:int) = 
-    let emp = Empty():>Item
+    let emp = Empty(-1,-1):>Item
     
-    let level = Array2D.create (length) (height) (emp)
+    //let level = Array2D.create (length) (height) (emp)
+    let level = Array2D.init length height (fun x y -> Empty(x,y):>Item)
     let canv = new Canvas(length,height)
     member val Height = height with get
     member val Level = level
@@ -147,40 +160,83 @@ type World (length:int,height:int) =
     
     member this.Play() = 
         
-        Array2D.iter (fun x -> if x = emp then () else x.RenderOn(canv)) this.Level
+        //Render level first time.
+        Array2D.iteri (fun x y item -> if item = emp then canv.Set(x,y,' ',Color.White, Color.White) else item.RenderOn(canv)) this.Level
         let player = Player(0,0)
         player.RenderOn(canv)
         canv.Show()
         let mutable newPlayerPos = (player.X,player.Y)
+        let mutable newZPos = (0,0)
         let mutable gameOver = false
+        let mutable roundCount = 0
+        
         
         //gameloop
         while not gameOver do 
-            let key = System.Console.ReadKey().Key
+            roundCount <- roundCount+1
             
+
+
+            //Takes player input
+            let key = System.Console.ReadKey(true).Key
+            newPlayerPos <- (player.X, player.Y)
             if key = System.ConsoleKey.DownArrow then newPlayerPos <- (player.X, player.Y+1)
             elif key = System.ConsoleKey.RightArrow then newPlayerPos <- (player.X+1, player.Y)
             elif key = System.ConsoleKey.LeftArrow then newPlayerPos <- (player.X-1, player.Y)
             elif key = System.ConsoleKey.UpArrow then newPlayerPos <- (player.X, player.Y-1)
 
-            if fst newPlayerPos >= 0 && fst newPlayerPos < length &&
-                snd newPlayerPos >= 0 && fst newPlayerPos < height &&
-                not (this.GetItem(fst newPlayerPos, snd newPlayerPos).FullyOccupy()) then 
-                    canv.Set(player.X, player.Y,' ', Color.Black, Color.White)
-                    player.MoveTo(fst newPlayerPos, snd newPlayerPos)
+            //Checks if newPos is within the scope of the World
+            if fst newPlayerPos >= 0 && fst newPlayerPos < length-1 &&
+                snd newPlayerPos >= 0 && snd newPlayerPos < height-1 then 
+                    
+                    //Checks if newPos is Fully Occupied
+                    if not (this.GetItem(fst newPlayerPos, snd newPlayerPos).FullyOccupy()) then
+                        player.MoveTo(fst newPlayerPos, snd newPlayerPos)
+                        
+                        //Checks if Item Should be removed or not
+                        if this.GetItem(fst newPlayerPos, snd newPlayerPos).ReplaceAfterInteract() then 
+                            this.AddItem(Empty(fst newPlayerPos, snd newPlayerPos)) 
+                            Empty(fst newPlayerPos, snd newPlayerPos).RenderOn(canv)
+                        
+                    (this.GetItem(fst newPlayerPos, snd newPlayerPos)).InteractWith(player)
+            
+                    //ZOMBIE attempt at moving enemy VIRKER IKKE
+                    if (roundCount%2 = 0) then
+                        Array2D.iteri (fun x y (item:Item) -> 
+                            if item.GetType() = Zombie(x,y).GetType() then
+
+                                newZPos <- (x,y) 
+                                if y<player.Y then newZPos <- (fst newZPos, y+1)
+                                elif y>player.Y then newZPos <- (fst newZPos, y-1)
+                        
+                                if  x<player.X then newZPos <- (x+1, snd newZPos)
+                                elif x>player.X then newZPos <- (x-1, snd newZPos)
+                                
+                                if this.GetItem(newZPos).Empty() then 
+                                    switch (this.GetItem(newZPos)) (item) this.Level
+                                    
+                            ) this.Level
+
+                    //Render all items and then player.
+                    Array2D.iteri (fun x y item -> if item = emp then canv.Set(x,y,' ',Color.White, Color.White) else item.RenderOn(canv)) this.Level
                     player.RenderOn(canv)
-            canv.Show()
-            this.GetItem(fst newPlayerPos, snd newPlayerPos).InteractWith(player)
-            if ((this.GetItem(fst newPlayerPos, snd newPlayerPos)).GetType().Equals Exit) then 
-                gameOver <- true
-                System.Console.Clear()
-                printfn "You Escaped! Well Done!"
-            elif player.IsDead() then 
-                gameOver <-true
-                System.Console.Clear()
-                printf "You Died! Game Over!"
+                    canv.Show()
 
+                    //Show Health
+                    System.Console.ForegroundColor<-System.ConsoleColor.Green
+                    printfn "Health : %i" (player.HitPoints())
+                    System.Console.ResetColor()
 
-            //Mangler ordenlige interactioner
+                    //Check if game has ended
+                    if ((this.GetItem(player.X, player.Y)).isExit() && player.HitPoints() >= 10) then 
+                        gameOver <- true
+                        System.Console.Clear()
+                        printfn "You Escaped! Well Done!"
+                    elif player.IsDead() then 
+                        gameOver <- true
+                        System.Console.Clear()
+                        printf "You Died! Game Over!"
+                    
+                    //Mangler ordenlige interactioner på plante.
 
         
