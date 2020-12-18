@@ -126,7 +126,6 @@ type Zombie (x:int, y:int) =
         player.Damage 5
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'Z',Color.Green, Color.Gray)
 
-
 type Exit (x:int, y:int) = 
     inherit Item(x, y, false)
     override this.isExit () = true
@@ -139,18 +138,6 @@ type Empty(x:int,y:int) =
     override this.InteractWith (player:Player) = ()
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.White)
 
-
-//Virker ikke som det skal
-//Switch posistion in level
-let switch (item1:Item) (item2:Item) (arr2D) =
-    //move position internally
-    item1.MoveTo(item2.X, item2.Y)
-    item2.MoveTo(item1.X, item1.Y)
-    //move posistion in Arr
-    let placeholder = (Array2D.get arr2D item1.X item1.Y)
-    Array2D.set arr2D item1.X item1.X (Array2D.get arr2D item2.X item2.Y)
-    Array2D.set arr2D item2.X item2.Y (placeholder)
-
 /// Returns a unless a is outside of bounds, then it returns the bounds.
 /// ex. clamp 0 10 -1 => 0
 /// ex. clamp 0 10  5 => 5
@@ -159,11 +146,12 @@ let clamp (lower: int) (upper: int) (a: int): int =
     a |> max lower |> min upper
 
 type World (width:int, height:int) = 
+    let player = Player(0,0)
     let emp = Empty(-1,-1):>Item
     
     // All items in the world
     let mutable items: Item list = List.Empty
-    let canv = new Canvas(width,height)
+    let mutable canv = new Canvas(width,height)
 
     member this.GetItem (x:int, y:int): Item =
         // We search the list for the item
@@ -173,16 +161,49 @@ type World (width:int, height:int) =
 
     member this.AddItem (item:Item) =
         items <- item::items
+
+    /// <summary> Load items from a file. </summary>
+    /// <param name="name"> The name of the level. A file with that name has to be present in ./ </param>
+    /// <returns> Which drones have collided during the simulation. </returns>
+    member this.OpenLevel (name:string) =
+        // Reset items
+        items <- List.Empty
+
+        let lines = System.IO.File.ReadLines ("levels/" + name)
+        // Width is the
+        let width = lines |> Seq.head |> String.length
+        let mutable y = 0
+        
+        for line in lines do
+            // Level has to have a constant width
+            if line.Length <> width then
+                failwith (sprintf "Line %d has a different width than the first" y)
+            
+            line |> String.iteri (fun x char ->
+                match char with
+                // Space is empty
+                | ' ' -> ()
+                | 'P' -> player.MoveTo (x, y)
+                | 'X' -> this.AddItem (Wall (x, y))
+                | 'W' -> this.AddItem (Water (x, y))
+                | 'F' -> this.AddItem (Fire (x, y))
+                | 'E' -> this.AddItem (Exit (x, y))
+                | 'Z' -> this.AddItem (Zombie (x, y))
+                | 'V' -> this.AddItem (FleshEatingPlant (x, y))
+                | unmatched -> failwith (sprintf "Character %c is not a valid entity" unmatched)
+            )
+
+            y <- y + 1
+        
+        // Update canvas size
+        canv <- Canvas (width,y)
+
     
     member this.Play() = 
-        let player = Player(0,0)
-
         let mutable newPlayerPos = (player.X,player.Y)
         let mutable newZPos = (0,0)
         let mutable gameOver = false
         let mutable roundCount = 0
-
-        //Array2D.iteri (fun x y item -> if item = emp then canv.Set(x,y,' ',Color.White, Color.White) else item.RenderOn(canv)) this.Level
 
         let render () = 
             // Render all items and then player.
@@ -191,7 +212,8 @@ type World (width:int, height:int) =
             player.RenderOn canv
             canv.Show ()
             // Print hit points
-            printfn "\nHP: %s" (String.replicate (player.HitPoints ()) "♥")
+            let hearts = max 0 (player.HitPoints ()) // Can't show negative hp
+            printfn "\nHP: %s" (String.replicate hearts "♥")
         
         // Initial render (so that we see the world before moving)
         render ()
