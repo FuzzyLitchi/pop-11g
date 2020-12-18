@@ -166,7 +166,6 @@ type World (width:int, height:int) =
     let canv = new Canvas(width,height)
 
     member this.GetItem (x:int, y:int): Item =
-        printfn "GetItem"
         // We search the list for the item
         items |>
             List.tryFind (fun item -> item.X = x && item.Y = y) |>
