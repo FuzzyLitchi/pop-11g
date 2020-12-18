@@ -187,10 +187,11 @@ type World (width:int, height:int) =
         let render () = 
             // Render all items and then player.
             canv.Reset ()
-            items |> List.iter (fun item -> item.RenderOn(canv))
-            printfn "%A" player
-            player.RenderOn(canv)
-            canv.Show()
+            items |> List.iter (fun item -> item.RenderOn canv)
+            player.RenderOn canv
+            canv.Show ()
+            // Print hit points
+            printfn "\nHP: %s" (String.replicate (player.HitPoints ()) "♥")
         
         // Initial render (so that we see the world before moving)
         render ()
@@ -219,13 +220,13 @@ type World (width:int, height:int) =
             if not (this.GetItem(fst newPlayerPos, snd newPlayerPos).FullyOccupy()) then
                 player.MoveTo(fst newPlayerPos, snd newPlayerPos)
                 
-                //Checks if Item Should be removed or not
+                //Checks if Item should be removed or not
                 if this.GetItem(fst newPlayerPos, snd newPlayerPos).ReplaceAfterInteract() then 
                     this.AddItem(Empty(fst newPlayerPos, snd newPlayerPos))
                 
             (this.GetItem(fst newPlayerPos, snd newPlayerPos)).InteractWith(player)
     
-            //ZOMBIE attempt at moving enemy VIRKER IKKE
+            // Zombie movement
             if (roundCount%2 = 0) then
                 items |> List.iter (fun (item:Item) -> 
                     if item :? Zombie then
@@ -244,11 +245,6 @@ type World (width:int, height:int) =
 
             // Render
             render ()
-
-            //Show Health
-            System.Console.ForegroundColor<-System.ConsoleColor.Green
-            printfn "Health : %i" (player.HitPoints())
-            System.Console.ResetColor()
 
             //Check if game has ended
             if ((this.GetItem(player.X, player.Y)).isExit() && player.HitPoints() >= 10) then 
