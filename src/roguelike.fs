@@ -2,7 +2,7 @@ module roguelike
 
 type Color = System.ConsoleColor
 
-///<summary> Function to print show a given point in the console </summary>
+/// <summary> Function to print show a given point in the console </summary>
 /// <param> a Point (System.Char*Color*Color) </param>
 /// <returns> unit </returns>
 let PrintPoint ((c,fg,bg)) = 
@@ -10,12 +10,12 @@ let PrintPoint ((c,fg,bg)) =
     System.Console.BackgroundColor <- bg
     printf "%c" c
 
-///<summary> Class to create a canvas to show grapics in Console. </summary>
-/// <param> Constructor takes number of desired rows and collumns </param>
+/// A canvas to render our entities with.
+/// <summary> Creates a canvas to show grapics in Console. </summary>
+/// <param name="rows"> The desired amount of rows. </param>
+/// <param name="cols"> The desired amount of collumns. </param>
 /// <returns> unit </returns>
-type Canvas(rows:int,cols:int) = 
-    
-    ///Constructor
+type Canvas(rows:int,cols:int) =
     let mutable xy = Array2D.create rows cols ((' ', Color.Black, Color.White))
     member val Rows = rows
     member val Cols = cols
@@ -25,16 +25,19 @@ type Canvas(rows:int,cols:int) =
     member this.Reset () =
         xy <- Array2D.create this.Rows this.Cols ((' ', Color.Black, Color.White))
 
-    ///<summary> Setter functions to assign values to a given Point in this Canvas </summary>
-    /// <param> a tuple of x-coord, y-coord, a char, a foreground color, and a background color. </param>
+    /// <summary> Setter functions to assign values to a given Point in this Canvas </summary>
+    /// <param name="x"> x-coordinate of the point. </param>
+    /// <param name="y"> y-coordinate of the point. </param>
+    /// <param name="c"> The character to show. </param>
+    /// <param name="fg"> Foregound color </param>
+    /// <param name="bg"> Background color. </param>
     /// <returns> unit </returns>
     member this.Set(x:int,y:int,c:char,fg:Color,bg:Color) = 
             xy.SetValue((c,fg,bg),x,y)
-    
-    ///<summary> Shows this Canvas in the console and resets color afterwards. Uses PrintPoint. </summary>
-    /// <param> unit </param>
+
+    /// <summary> Shows this Canvas in the console and resets color afterwards. Uses PrintPoint. </summary>
     /// <returns> unit </returns>
-    member this.Show()=
+    member this.Show () =
         System.Console.Clear()
         for y in [0..this.Cols-1] do
             printf "\n"
@@ -42,125 +45,224 @@ type Canvas(rows:int,cols:int) =
                 PrintPoint (Array2D.get xy x y)
         System.Console.ResetColor()
 
+/// An entity in our world.
+/// Everything that exists within the world is an entity.
 [<AbstractClass>]
 type Entity(x:int, y:int) =
+    /// This entities' position
+    abstract Position : (int*int) with get, set
+    default val Position = (x,y) with get, set
 
-        abstract Position : (int*int) with get, set
-        default val Position = (x,y) with get, set
-        abstract member RenderOn: Canvas -> unit
-        default this.RenderOn (canvas:Canvas) = ()
-        
-        member this.X = fst this.Position
-        member this.Y = snd this.Position
+    /// <summary> Renders this enitity </summary>
+    /// <param name="canvas"> The canvas to render the entity onto. </param>
+    /// <returns> Nothing </returns>
+    abstract member RenderOn: Canvas -> unit
+    default this.RenderOn (canvas:Canvas) = ()
 
+    member this.X = fst this.Position
+    member this.Y = snd this.Position
 
+    /// <summary> Move this entity </summary>
+    /// <param name="x"> The desired x-coordinate. </param>
+    /// <param name="y"> The desired y-coordinate. </param>
+    /// <returns> Nothing </returns>
+    member this.MoveTo(x:int,y:int) = this.Position <- (x,y)
+
+/// The player.
+/// There should be only one player in our world.
 type Player(x: int, y: int) =
     inherit Entity (x,y)
+
+    /// Maximum health
     let maxHealth = 20
+    /// Current health
     let mutable health = 10
+
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn(canvas:Canvas) = canvas.Set(this.X,this.Y,'�',Color.White, Color.Black)
 
+    /// <summary> Decrements the player's health. </summary>
+    /// <param name="damage"> How much health to remove. </param>
+    /// <returns> Nothing </returns>
     member this.Damage (damage: int) =
         health <- health-damage
-    
+
+    /// <summary> Increment the player's health. </summary>
+    /// <param name="damage"> How much health to add. </param>
+    /// <returns> Nothing </returns>
     member this.Heal (amount: int) =
         health <- min (health + amount) maxHealth
-    
-    member this.MoveTo (x: int, y: int) =
-        this.Position <- (x,y)
 
+    /// <summary> Get the player's health. </summary>
+    /// <returns> The player's health </returns>
     member this.HitPoints () : int =
         health
 
-    member this.IsDead () : bool = health < 0 // Feels kinda weird that we're alive when we have 0 health, but whatever
+    /// <summary> Check if the player is dead. </summary>
+    /// <returns> Whether the player is dead </returns> 
+    member this.IsDead () : bool =
+        health < 0 // Feels kinda weird that we're alive when we have 0 health, but whatever
 
+    /// <summary> Debug function to print the player. </summary>
+    /// <returns> Debug string representation. </returns> 
     override this.ToString() =
         sprintf "Player(%d, %d)" this.X this.Y
 
 [<AbstractClass>]
-type Item (x: int, y: int, occupie:bool) =
+type Item (x: int, y: int, occupy: bool) =
     inherit Entity (x,y)
-    override this.RenderOn(canvas:Canvas) = ()
 
+    /// <summary> Check if this item is the exit. </summary>
+    /// <returns> Whether or not the item is the exit. </returns>
     abstract isExit: unit -> bool
     default this.isExit () = false
 
+    // NOTE: I think we shouldn't have an Empty function or Item.
     abstract member Empty: unit -> bool
     default this.Empty() = false
 
+    /// <summary> Check if we need to remove the item. </summary>
+    /// <returns> Whether or not to remove the item after an iteraction. </returns>
     abstract member ReplaceAfterInteract: unit -> bool
     default this.ReplaceAfterInteract() = false
 
-    member this.MoveTo(x:int,y:int) = this.Position <- (x,y)
-
+    /// <summary> Make the item interact with the player. Called when the player touches the item. </summary>
+    /// <returns> Nothing. </returns>
     abstract member InteractWith : Player -> unit
     default this.InteractWith (player:Player) = ()
-    
-    member this.FullyOccupy() : bool = occupie
+
+    /// <summary> Check if the item fully occupies the space it is in. </summary>
+    /// <returns> Whether or not it fully occupies it. </returns>
+    member this.FullyOccupy() : bool = occupy
 
 type Wall (x:int, y:int) =
     inherit Item(x, y, true)
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.DarkGray)
 
 type Water (x:int, y:int) =
     inherit Item(x, y, false)
+
+    /// Water heals 2 hitpoints
+    /// <see cref="Item"> Documented in item </see>
     override this.InteractWith (player:Player) = player.Heal 2
+
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'~',Color.White,Color.Blue)
 
 type Fire(x:int, y:int) =
     inherit Item(x, y, false)
-    override this.InteractWith (player:Player) = player.Damage 2
+    let mutable hp = 5
+
+    /// Fire damages 1 hitpoints, and is trampled after 5 interactions.
+    /// <see cref="Item"> Documented in item </see>
+    override this.InteractWith (player:Player) =
+        player.Damage 1
+        hp <- hp - 1
+
+    /// Fire is trampled after 5 interactions and should be removed.
+    /// <see cref="Item"> Documented in item </see>
+    default this.ReplaceAfterInteract() =
+        // The fire is trampled when it has 0 hp or less, and therefore it should be removed.
+        hp <= 0
+
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'^',Color.Red, Color.Yellow)
 
-type FleshEatingPlant (x:int, y:int) = 
+type FleshEatingPlant (x:int, y:int) =
     inherit Item(x, y, true)
+
+    /// The plant dies after biting the player :(
+    /// <see cref="Item"> Documented in item </see>
     override this.ReplaceAfterInteract() = true
-    override this.InteractWith (player:Player) = 
+
+    /// The plant bites the player for 5 damage
+    /// <see cref="Item"> Documented in item </see>
+    override this.InteractWith (player:Player) =
         player.Damage 5
+    
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.DarkGreen)
 
 type Zombie (x:int, y:int) = 
     inherit Item(x, y, true)
+
+    // NOTE: I feel like it's cooler if the zombie doesn't die
     override this.ReplaceAfterInteract() = true
-    override this.InteractWith (player:Player) = 
+
+    /// The zombie bites the player for 5 damage
+    /// <see cref="Item"> Documented in item </see>
+    override this.InteractWith (player:Player) =
         player.Damage 5
+
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'Z',Color.Green, Color.Gray)
 
 type Exit (x:int, y:int) = 
     inherit Item(x, y, false)
+
+    /// Exit is an exit
+    /// <see cref="Item"> Documented in item </see>
     override this.isExit () = true
-    override this.InteractWith (player:Player) = ()
+
+    /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.Black)
 
 type Empty(x:int,y:int) = 
     inherit Item(x,y, false)
-    override this.Empty() = true
-    override this.InteractWith (player:Player) = ()
-    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.White)
 
-/// Returns a unless a is outside of bounds, then it returns the bounds.
-/// ex. clamp 0 10 -1 => 0
-/// ex. clamp 0 10  5 => 5
-/// ex. clamp 0 10 99 => 10
+    /// Empty is empty
+    /// <see cref="Item"> Documented in item </see>
+    override this.Empty() = true
+
+/// <summary>
+/// Limits the value of a to be between to bounds.
+/// examples: 
+/// clamp 0 10 -1 => 0
+/// clamp 0 10  5 => 5
+/// clamp 0 10 99 => 10 
+/// </summary>
+/// <param name="lower"> Lower bound </param>
+/// <param name="upper"> Upper bound </param>
+/// <param name="a"> A value to clamp </param>
+/// <returns> Returns a, unless a is outside of bounds, then it returns the bounds. </returns>
 let clamp (lower: int) (upper: int) (a: int): int =
     a |> max lower |> min upper
 
+/// The world. This object contains all items and the player.
 type World (width:int, height:int) = 
     let player = Player(0,0)
     let emp = Empty(-1,-1):>Item
-    
+
     // All items in the world
     let mutable items: Item list = List.Empty
     let mutable canv = new Canvas(width,height)
 
+    /// <summary> Gets an item in some position </summary>
+    /// <param name="x"> x-coordinate of the item </param>
+    /// <param name="y"> y-coordinate of the item </param>
+    /// <returns> The item at that position, or the empty item. </returns>
     member this.GetItem (x:int, y:int): Item =
         // We search the list for the item
         items |>
             List.tryFind (fun item -> item.X = x && item.Y = y) |>
             Option.defaultValue emp // NOTE: I think we should use None to represent empty
 
+    /// <summary> Adds an item to the world </summary>
+    /// <param name="item"> The item to add </param>
+    /// <returns> Nothing </returns>
     member this.AddItem (item:Item) =
+        // This implementation allows for one item to be added multiple times.
+        // I'm not sure what effects that would have, but it is probably a bad idea.
         items <- item::items
+
+    /// <summary> Removes an item to the world </summary>
+    /// <param name="item"> The item to remove </param>
+    /// <returns> Nothing </returns>
+    member this.RemoveItem (removedItem:Item) =
+        printfn "Removed %A" removedItem
+        // Keep every item that isn't the item we are removing.
+        items <- items |> List.filter (fun item -> item <> removedItem)
 
     /// <summary> Load items from a file. </summary>
     /// <param name="name"> The name of the level. A file with that name has to be present in ./ </param>
@@ -173,12 +275,12 @@ type World (width:int, height:int) =
         // Width is the
         let width = lines |> Seq.head |> String.length
         let mutable y = 0
-        
+
         for line in lines do
             // Level has to have a constant width
             if line.Length <> width then
                 failwith (sprintf "Line %d has a different width than the first" y)
-            
+
             line |> String.iteri (fun x char ->
                 match char with
                 // Space is empty
@@ -194,12 +296,13 @@ type World (width:int, height:int) =
             )
 
             y <- y + 1
-        
+
         // Update canvas size
         canv <- Canvas (width,y)
 
-    
-    member this.Play() = 
+    /// <summary> Starts the game loop and continues until death or victory. </summary>
+    /// <returns> Nothing. </returns>
+    member this.Play () = 
         let mutable newPlayerPos = (player.X,player.Y)
         let mutable newZPos = (0,0)
         let mutable gameOver = false
@@ -214,11 +317,11 @@ type World (width:int, height:int) =
             // Print hit points
             let hearts = max 0 (player.HitPoints ()) // Can't show negative hp
             printfn "\nHP: %s" (String.replicate hearts "♥")
-        
+
         // Initial render (so that we see the world before moving)
         render ()
-        
-        //gameloop
+
+        // Gameloop
         while not gameOver do 
             roundCount <- roundCount+1
 
@@ -237,30 +340,35 @@ type World (width:int, height:int) =
             // Restrict position to be within the boundaries of the world 
             newPlayerPos <- (newPlayerPos |> fst |> clamp 0 (width-1), newPlayerPos |> snd |> clamp 0 (height-1))
 
-            // Make sure player isn't within a solid item
-            // Checks if newPos is Fully Occupied
-            if not (this.GetItem(fst newPlayerPos, snd newPlayerPos).FullyOccupy()) then
+            // Make sure the new player position isn't within a solid item
+            let item = this.GetItem(fst newPlayerPos, snd newPlayerPos) // Item at the new position
+            if not (item.FullyOccupy()) then
                 player.MoveTo(fst newPlayerPos, snd newPlayerPos)
-                
-                //Checks if Item should be removed or not
-                if this.GetItem(fst newPlayerPos, snd newPlayerPos).ReplaceAfterInteract() then 
-                    this.AddItem(Empty(fst newPlayerPos, snd newPlayerPos))
-                
-            (this.GetItem(fst newPlayerPos, snd newPlayerPos)).InteractWith(player)
-    
+
+            item.InteractWith(player)
+
+            //Checks if Item should be removed or not
+            if item.ReplaceAfterInteract() then 
+                this.RemoveItem(item)
+
+
+            // NOTE: Ideally, we would have zombie movement code be encapsulated within the zombie.
             // Zombie movement
-            if (roundCount%2 = 0) then
+            if (roundCount%2 = 0) then // We move every 2 turns
                 items |> List.iter (fun (item:Item) -> 
+                    // The zombie can move 1 unit on the x-axis and 1 on the y-axis.
+                    // It always tries moves towards the player
                     if item :? Zombie then
                         let (x,y) = (item.X, item.Y)
 
                         let mutable newZPos = (item.X, item.Y)
                         if y<player.Y then newZPos <- (fst newZPos, y+1)
                         elif y>player.Y then newZPos <- (fst newZPos, y-1)
-                
+
                         if  x<player.X then newZPos <- (x+1, snd newZPos)
                         elif x>player.X then newZPos <- (x-1, snd newZPos)
-                        
+
+                        // The zombie only moves to empty spaces
                         if this.GetItem(newZPos).Empty() then
                             item.MoveTo newZPos
                     )
@@ -268,7 +376,7 @@ type World (width:int, height:int) =
             // Render
             render ()
 
-            //Check if game has ended
+            // Check if game has ended
             if ((this.GetItem(player.X, player.Y)).isExit() && player.HitPoints() >= 10) then 
                 gameOver <- true
                 System.Console.Clear()
@@ -277,7 +385,3 @@ type World (width:int, height:int) =
                 gameOver <- true
                 System.Console.Clear()
                 printf "You Died! Game Over!"
-            
-            //Mangler ordenlige interactioner p� plante.
-
-        
