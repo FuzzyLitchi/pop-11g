@@ -2,13 +2,19 @@ module roguelike
 
 type Color = System.ConsoleColor
 
-/// <summary> Function to print show a given point in the console </summary>
-/// <param> a Point (System.Char*Color*Color) </param>
-/// <returns> unit </returns>
-let PrintPoint ((c,fg,bg)) = 
-    System.Console.ForegroundColor <- fg
-    System.Console.BackgroundColor <- bg
-    printf "%c" c
+/// <summary>
+/// Limits the value of a to be between to bounds.
+/// examples: 
+/// clamp 0 10 -1 => 0
+/// clamp 0 10  5 => 5
+/// clamp 0 10 99 => 10 
+/// </summary>
+/// <param name="lower"> Lower bound </param>
+/// <param name="upper"> Upper bound </param>
+/// <param name="a"> A value to clamp </param>
+/// <returns> Returns a, unless a is outside of bounds, then it returns the bounds. </returns>
+let clamp (lower: int) (upper: int) (a: int): int =
+    a |> max lower |> min upper
 
 /// A canvas to render our entities with.
 /// <summary> Creates a canvas to show grapics in Console. </summary>
@@ -35,16 +41,21 @@ type Canvas(rows:int,cols:int) =
     member this.Set(x:int,y:int,c:char,fg:Color,bg:Color) = 
             xy.SetValue((c,fg,bg),x,y)
 
-    /// <summary> Shows this Canvas in the console and resets color afterwards. Uses PrintPoint. </summary>
+    /// <summary> Shows this Canvas in the console and resets color afterwards. </summary>
     /// <returns> unit </returns>
     member this.Show () =
         System.Console.Clear()
         for y in [0..this.Cols-1] do
             printf "\n"
-            for x in [0..this.Rows-1] do 
-                PrintPoint (Array2D.get xy x y)
+            for x in xy.[0.., y] do 
+                x|>(fun (c,fg,bg) -> 
+                        System.Console.ForegroundColor <- fg
+                        System.Console.BackgroundColor <- bg
+                        printf "%c" c)
         System.Console.ResetColor()
+    
 
+    
 /// An entity in our world.
 /// Everything that exists within the world is an entity.
 [<AbstractClass>]
@@ -135,9 +146,14 @@ type Item (x: int, y: int, occupy: bool) =
     /// <returns> Whether or not it fully occupies it. </returns>
     member this.FullyOccupy() : bool = occupy
 
+    /// <summary> Used to compute Enemy movement, most items are how ever not moving enemies. </summary>
+    /// <returns> Unit </returns>
+    abstract member MoveZ : Player*Item list * int * int * int -> unit
+    default this.MoveZ (player:Player, items:Item list, roundCount:int, width: int, heigth:int) = ()
+
 type Wall (x:int, y:int) =
     inherit Item(x, y, true)
-    /// <see cref="Entity"> Documented in entity </see>
+    /// <see cref="Entity"> Documented in entity </see>d
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.DarkGray)
 
 type Water (x:int, y:int) =
@@ -184,19 +200,8 @@ type FleshEatingPlant (x:int, y:int) =
     /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.DarkGreen)
 
-type Zombie (x:int, y:int) = 
-    inherit Item(x, y, true)
 
-    // NOTE: I feel like it's cooler if the zombie doesn't die
-    override this.ReplaceAfterInteract() = true
-
-    /// The zombie bites the player for 5 damage
-    /// <see cref="Item"> Documented in item </see>
-    override this.InteractWith (player:Player) =
-        player.Damage 5
-
-    /// <see cref="Entity"> Documented in entity </see>
-    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'Z',Color.Green, Color.Gray)
+                
 
 type Exit (x:int, y:int) = 
     inherit Item(x, y, false)
@@ -215,24 +220,63 @@ type Empty(x:int,y:int) =
     /// <see cref="Item"> Documented in item </see>
     override this.Empty() = true
 
-/// <summary>
-/// Limits the value of a to be between to bounds.
-/// examples: 
-/// clamp 0 10 -1 => 0
-/// clamp 0 10  5 => 5
-/// clamp 0 10 99 => 10 
-/// </summary>
-/// <param name="lower"> Lower bound </param>
-/// <param name="upper"> Upper bound </param>
-/// <param name="a"> A value to clamp </param>
-/// <returns> Returns a, unless a is outside of bounds, then it returns the bounds. </returns>
-let clamp (lower: int) (upper: int) (a: int): int =
-    a |> max lower |> min upper
+type Zombie (x:int, y:int) = 
+    inherit Item(x, y, true)
+
+    /// The zombie bites the player for 5 damage
+    /// <see cref="Item"> Documented in item </see>
+    override this.InteractWith (player:Player) =
+        player.Damage 5
+    /// <see cref="Entity"> Documented in entity </see>
+    override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,'Z',Color.Green, Color.Gray)
+
+
+    ///Moves this Zombie towards player if its within 5 tiles or walks around randomly. Can move 1 tile on both axis if not blocked, every other turn.
+      /// <see cref="Item"> Documented in entity </see>
+    override this.MoveZ (player:Player, items:Item list, roundCount:int, width:int, height:int) = 
+        
+        if (roundCount%2 = 0) then // We move every 2 turns
+            
+            let (x,y) = (this.X, this.Y)
+            let mutable newZPos = (this.X, this.Y)
+
+            //Checks if player is within 10 tiles of this Zombie
+            if System.Math.Abs (player.X-this.X)<10 && System.Math.Abs(player.Y-this.Y)<10 then
+                   
+                // Zombie Chase behavoir
+
+                   // Checks if movement is blocked by item in y direction, resets position if blocked.
+                   newZPos <- (fst newZPos, y+(player.Y.CompareTo y))
+                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then
+                        this.MoveTo newZPos
+                   else newZPos <- (this.X, this.Y)
+
+                   // Checks if movement is blocked by item in x direction. 
+                   newZPos <- (x+(player.X.CompareTo x), snd newZPos)
+                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then // NOTE: I think we should use None to represent empty.Empty() then
+                       this.MoveTo newZPos
+            else
+                //Zombie Random Walk, with within bounds. // NOTE: Der er noget der for zombierne til at springe store afstande i nærheden af bounds. 
+                let r = new System.Random()
+
+                newZPos <- (clamp 0 (height-1) (fst newZPos), y+(r.Next(-1, 2))) 
+                if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then
+                    this.MoveTo newZPos
+                else newZPos <- (x, y)
+
+                // Checks if movement is blocked by item in x direction
+                newZPos <- (clamp 0 (width-1) (x+(r.Next(-1, 2))), snd newZPos) 
+                if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then // NOTE: I think we should use None to represent empty.Empty() then
+                    this.MoveTo newZPos
+
+
 
 /// The world. This object contains all items and the player.
 type World (width:int, height:int) = 
     let player = Player(0,0)
-    let emp = Empty(-1,-1):>Item
+
+    let mutable width = width
+    let mutable height = height
 
     // All items in the world
     let mutable items: Item list = List.Empty
@@ -246,7 +290,7 @@ type World (width:int, height:int) =
         // We search the list for the item
         items |>
             List.tryFind (fun item -> item.X = x && item.Y = y) |>
-            Option.defaultValue emp // NOTE: I think we should use None to represent empty
+            Option.defaultValue (Empty(-1,-1):>Item) // NOTE: I think we should use None to represent empty
 
     /// <summary> Adds an item to the world </summary>
     /// <param name="item"> The item to add </param>
@@ -273,7 +317,7 @@ type World (width:int, height:int) =
 
         let lines = System.IO.File.ReadLines ("levels/" + name)
         // Width is the
-        let width = lines |> Seq.head |> String.length
+        width <- lines |> Seq.head |> String.length
         let mutable y = 0
 
         for line in lines do
@@ -304,7 +348,7 @@ type World (width:int, height:int) =
     /// <returns> Nothing. </returns>
     member this.Play () = 
         let mutable newPlayerPos = (player.X,player.Y)
-        let mutable newZPos = (0,0)
+        
         let mutable gameOver = false
         let mutable roundCount = 0
 
@@ -340,6 +384,10 @@ type World (width:int, height:int) =
             // Restrict position to be within the boundaries of the world 
             newPlayerPos <- (newPlayerPos |> fst |> clamp 0 (width-1), newPlayerPos |> snd |> clamp 0 (height-1))
 
+            //Moves Zombies
+            items |> List.iter (fun item -> if item :? Zombie then item.MoveZ(player, items, roundCount, width, height))
+                    
+
             // Make sure the new player position isn't within a solid item
             let item = this.GetItem(fst newPlayerPos, snd newPlayerPos) // Item at the new position
             if not (item.FullyOccupy()) then
@@ -351,31 +399,12 @@ type World (width:int, height:int) =
             if item.ReplaceAfterInteract() then 
                 this.RemoveItem(item)
 
-
-            // NOTE: Ideally, we would have zombie movement code be encapsulated within the zombie.
-            // Zombie movement
-            if (roundCount%2 = 0) then // We move every 2 turns
-                items |> List.iter (fun (item:Item) -> 
-                    // The zombie can move 1 unit on the x-axis and 1 on the y-axis.
-                    // It always tries moves towards the player
-                    if item :? Zombie then
-                        let (x,y) = (item.X, item.Y)
-
-                        let mutable newZPos = (item.X, item.Y)
-                        if y<player.Y then newZPos <- (fst newZPos, y+1)
-                        elif y>player.Y then newZPos <- (fst newZPos, y-1)
-
-                        if  x<player.X then newZPos <- (x+1, snd newZPos)
-                        elif x>player.X then newZPos <- (x-1, snd newZPos)
-
-                        // The zombie only moves to empty spaces
-                        if this.GetItem(newZPos).Empty() then
-                            item.MoveTo newZPos
-                    )
-
             // Render
             render ()
 
+            items |> List.iter (fun item -> if item :? Zombie then printfn "%A" (System.Math.Abs (player.X - item.X)))
+            let r = System.Random()
+            printf "%A" (r.Next(-1, 2))
             // Check if game has ended
             if ((this.GetItem(player.X, player.Y)).isExit() && player.HitPoints() >= 10) then 
                 gameOver <- true
