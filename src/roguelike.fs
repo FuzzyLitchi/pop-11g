@@ -263,6 +263,8 @@ type Zombie (x:int, y:int) =
                     canv.Reset(x, y)
                     this.MoveTo newZPos
 
+            this.RenderOn(canv)
+
 
 
 /// The world. This object contains all items and the player.
@@ -343,11 +345,14 @@ type World (width:int, height:int) =
 
         let mutable gameOver = false
         let mutable roundCount = 0
+        
+        // Render all items and then player.
+        items |> List.iter (fun item -> item.RenderOn canv)
+        player.RenderOn canv
 
+        //Shows canvas and Health
         let render () = 
-            // Render all items and then player.
-            items |> List.iter (fun item -> item.RenderOn canv)
-            player.RenderOn canv
+            player.RenderOn(canv)
             canv.Show ()
             // Print hit points
             let hearts = max 0 (player.HitPoints ()) // Can't show negative hp
@@ -382,18 +387,18 @@ type World (width:int, height:int) =
             // Make sure the new player position isn't within a solid item
             let item = this.GetItem(fst newPlayerPos, snd newPlayerPos) // Item at the new position
             if item.IsNone || not (item.Value.FullyOccupy()) then
-                canv.Reset(player.X, player.Y)
+                if this.GetItem(player.X, player.Y).IsNone then
+                    canv.Reset(player.X, player.Y)
+                else this.GetItem(player.X, player.Y).Value.RenderOn(canv)
                 player.MoveTo(fst newPlayerPos, snd newPlayerPos)
-                player.RenderOn(canv)
+                
             if item.IsSome then 
                 item.Value.InteractWith(player)  
                 //Checks if Item should be removed or not
                 if item.Value.ReplaceAfterInteract() then this.RemoveItem(item.Value)
                 
-
-            // Render
-            render ()
-
+            
+            render()
             // Check if game has ended
             if ((this.GetItem(player.X, player.Y)).IsSome && (this.GetItem(player.X, player.Y)).Value.isExit() && player.HitPoints() >= 5) then 
                 gameOver <- true
