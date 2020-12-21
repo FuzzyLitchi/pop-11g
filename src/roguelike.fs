@@ -26,10 +26,10 @@ type Canvas(rows:int,cols:int) =
     member val Rows = rows
     member val Cols = cols
 
-    /// <summary> Resets the canvas to be white </summary>
+    /// <summary> Resets position in the canvas to be white </summary>
     /// <returns> Nothing. </returns>
     member this.Reset (x:int, y:int) =
-        Array2D.set xy x y ((' ', Color.Black, Color.White))
+        xy.SetValue ((' ', Color.Black, Color.White), x, y)
 
     /// <summary> Setter functions to assign values to a given Point in this Canvas </summary>
     /// <param name="x"> x-coordinate of the point. </param>
