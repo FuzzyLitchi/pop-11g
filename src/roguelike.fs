@@ -26,10 +26,10 @@ type Canvas(rows:int,cols:int) =
     member val Rows = rows
     member val Cols = cols
 
-    /// <summary> Resets position in the canvas to be white </summary>
+    /// <summary> Resets the canvas to be white </summary>
     /// <returns> Nothing. </returns>
-    member this.Reset (x:int, y:int) =
-        xy.SetValue ((' ', Color.Black, Color.White), x, y)
+    member this.Reset () =
+        xy <- Array2D.create this.Rows this.Cols ((' ', Color.Black, Color.White))
 
     /// <summary> Setter functions to assign values to a given Point in this Canvas </summary>
     /// <param name="x"> x-coordinate of the point. </param>
@@ -79,8 +79,7 @@ type Entity(x:int, y:int) =
     /// <param name="x"> The desired x-coordinate. </param>
     /// <param name="y"> The desired y-coordinate. </param>
     /// <returns> Nothing </returns>
-    member this.MoveTo(x:int,y:int) = 
-        this.Position <- (x,y)
+    member this.MoveTo(x:int,y:int) = this.Position <- (x,y)
 
 /// The player.
 /// There should be only one player in our world.
@@ -147,8 +146,8 @@ type Item (x: int, y: int, occupy: bool) =
 
     /// <summary> Used to compute Enemy movement, most items are how ever not moving enemies. </summary>
     /// <returns> Unit </returns>
-    abstract member MoveZ : Player*Item list * int * int * int * Canvas -> unit
-    default this.MoveZ (player:Player, items:Item list, roundCount:int, width: int, heigth:int, canv:Canvas) = ()
+    abstract member MoveZ : Player*Item list * int * int * int -> unit
+    default this.MoveZ (player:Player, items:Item list, roundCount:int, width: int, heigth:int) = ()
 
 type Wall (x:int, y:int) =
     inherit Item(x, y, true)
@@ -223,7 +222,7 @@ type Zombie (x:int, y:int) =
 
     ///Moves this Zombie towards player if its within 5 tiles or walks around randomly. Can move 1 tile on both axis if not blocked, every other turn.
       /// <see cref="Item"> Documented in entity </see>
-    override this.MoveZ (player:Player, items:Item list, roundCount:int, width:int, height:int, canv:Canvas) = 
+    override this.MoveZ (player:Player, items:Item list, roundCount:int, width:int, height:int) = 
         
         if (roundCount%2 = 0) then // We move every 2 turns
             
@@ -238,14 +237,12 @@ type Zombie (x:int, y:int) =
                    // Checks if movement is blocked by item in y direction, resets position if blocked.
                    newZPos <- (fst newZPos, y+(player.Y.CompareTo y))
                    if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone) then
-                        canv.Reset(x, y)
                         this.MoveTo newZPos
                    else newZPos <- (this.X, this.Y)
 
                    // Checks if movement is blocked by item in x direction. 
                    newZPos <- (x+(player.X.CompareTo x), snd newZPos)
                    if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone) then // NOTE: I think we should use None to represent empty.Empty() then
-                       canv.Reset(x, y)
                        this.MoveTo newZPos
             else
                 //Zombie Random Walk, with within bounds.
@@ -253,17 +250,13 @@ type Zombie (x:int, y:int) =
 
                 newZPos <- (fst newZPos, clamp 0 (height-1) (y+r.Next(-1, 2)))
                 if items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy() ) |> Option.isNone then
-                    canv.Reset(x, y)
                     this.MoveTo newZPos
                 else newZPos <- (x, y)
 
                 // Checks if movement is blocked by item in x direction
                 newZPos <- (clamp 0 (width-1) (x+(r.Next(-1, 2))), snd newZPos) 
                 if items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone then // NOTE: I think we should use None to represent empty.Empty() then
-                    canv.Reset(x, y)
                     this.MoveTo newZPos
-
-            this.RenderOn(canv)
 
 
 
@@ -345,14 +338,12 @@ type World (width:int, height:int) =
 
         let mutable gameOver = false
         let mutable roundCount = 0
-        
-        // Render all items and then player.
-        items |> List.iter (fun item -> item.RenderOn canv)
-        player.RenderOn canv
 
-        //Shows canvas and Health
         let render () = 
-            player.RenderOn(canv)
+            // Render all items and then player.
+            canv.Reset ()
+            items |> List.iter (fun item -> item.RenderOn canv)
+            player.RenderOn canv
             canv.Show ()
             // Print hit points
             let hearts = max 0 (player.HitPoints ()) // Can't show negative hp
@@ -376,29 +367,27 @@ type World (width:int, height:int) =
                     | System.ConsoleKey.UpArrow -> (player.X, player.Y-1)
                     // Player didn't press any of the arrow keys
                     | _ -> (player.X, player.Y)
-            
+
             // Restrict position to be within the boundaries of the world 
             newPlayerPos <- (newPlayerPos |> fst |> clamp 0 (width-1), newPlayerPos |> snd |> clamp 0 (height-1))
 
             //Moves Zombies
-            items |> List.iter (fun item -> item.MoveZ(player, items, roundCount, width, height, canv))
+            items |> List.iter (fun item -> item.MoveZ(player, items, roundCount, width, height))
                     
 
             // Make sure the new player position isn't within a solid item
             let item = this.GetItem(fst newPlayerPos, snd newPlayerPos) // Item at the new position
             if item.IsNone || not (item.Value.FullyOccupy()) then
-                if this.GetItem(player.X, player.Y).IsNone then
-                    canv.Reset(player.X, player.Y)
-                else this.GetItem(player.X, player.Y).Value.RenderOn(canv)
                 player.MoveTo(fst newPlayerPos, snd newPlayerPos)
-                
             if item.IsSome then 
                 item.Value.InteractWith(player)  
                 //Checks if Item should be removed or not
                 if item.Value.ReplaceAfterInteract() then this.RemoveItem(item.Value)
                 
-            
-            render()
+
+            // Render
+            render ()
+
             // Check if game has ended
             if ((this.GetItem(player.X, player.Y)).IsSome && (this.GetItem(player.X, player.Y)).Value.isExit() && player.HitPoints() >= 5) then 
                 gameOver <- true
