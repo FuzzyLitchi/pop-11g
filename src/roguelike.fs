@@ -272,14 +272,14 @@ type World (width:int, height:int) =
         items <- List.Empty
 
         let lines = System.IO.File.ReadLines ("levels/" + name)
-        // Width is the
+        // Width is just how many character there is on each line
         let width = lines |> Seq.head |> String.length
         let mutable y = 0
 
         for line in lines do
             // Level has to have a constant width
             if line.Length <> width then
-                failwith (sprintf "Line %d has a different width than the first" y)
+                failwithf "Line %d has a different width than the first" y
 
             line |> String.iteri (fun x char ->
                 match char with
@@ -292,7 +292,7 @@ type World (width:int, height:int) =
                 | 'E' -> this.AddItem (Exit (x, y))
                 | 'Z' -> this.AddItem (Zombie (x, y))
                 | 'V' -> this.AddItem (FleshEatingPlant (x, y))
-                | unmatched -> failwith (sprintf "Character %c is not a valid entity" unmatched)
+                | unmatched -> failwithf "Character %c is not a valid entity" unmatched
             )
 
             y <- y + 1
