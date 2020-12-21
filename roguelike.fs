@@ -130,10 +130,6 @@ type Item (x: int, y: int, occupy: bool) =
     abstract isExit: unit -> bool
     default this.isExit () = false
 
-    // NOTE: I think we shouldn't have an Empty function or Item.
-    abstract member Empty: unit -> bool
-    default this.Empty() = false
-
     /// <summary> Check if we need to remove the item. </summary>
     /// <returns> Whether or not to remove the item after an iteraction. </returns>
     abstract member ReplaceAfterInteract: unit -> bool
@@ -213,13 +209,6 @@ type Exit (x:int, y:int) =
     /// <see cref="Entity"> Documented in entity </see>
     override this.RenderOn (canvas:Canvas) = canvas.Set(this.X,this.Y,' ',Color.White, Color.Black)
 
-type Empty(x:int,y:int) = 
-    inherit Item(x,y, false)
-
-    /// Empty is empty
-    /// <see cref="Item"> Documented in item </see>
-    override this.Empty() = true
-
 type Zombie (x:int, y:int) = 
     inherit Item(x, y, true)
 
@@ -247,26 +236,26 @@ type Zombie (x:int, y:int) =
 
                    // Checks if movement is blocked by item in y direction, resets position if blocked.
                    newZPos <- (fst newZPos, y+(player.Y.CompareTo y))
-                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then
+                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone) then
                         this.MoveTo newZPos
                    else newZPos <- (this.X, this.Y)
 
                    // Checks if movement is blocked by item in x direction. 
                    newZPos <- (x+(player.X.CompareTo x), snd newZPos)
-                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then // NOTE: I think we should use None to represent empty.Empty() then
+                   if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone) then // NOTE: I think we should use None to represent empty.Empty() then
                        this.MoveTo newZPos
             else
                 //Zombie Random Walk, with within bounds.
                 let r = new System.Random()
 
                 newZPos <- (fst newZPos, clamp 0 (height-1) (y+r.Next(-1, 2)))
-                if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then
+                if items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy() ) |> Option.isNone then
                     this.MoveTo newZPos
                 else newZPos <- (x, y)
 
                 // Checks if movement is blocked by item in x direction
                 newZPos <- (clamp 0 (width-1) (x+(r.Next(-1, 2))), snd newZPos) 
-                if (items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos ) |> Option.defaultValue (Empty(-1,-1):>Item)).Empty() then // NOTE: I think we should use None to represent empty.Empty() then
+                if items |> List.tryFind (fun item -> item.X = fst newZPos && item.Y = snd newZPos && item.FullyOccupy()) |> Option.isNone then // NOTE: I think we should use None to represent empty.Empty() then
                     this.MoveTo newZPos
 
 
@@ -286,11 +275,10 @@ type World (width:int, height:int) =
     /// <param name="x"> x-coordinate of the item </param>
     /// <param name="y"> y-coordinate of the item </param>
     /// <returns> The item at that position, or the empty item. </returns>
-    member this.GetItem (x:int, y:int): Item =
+    member this.GetItem (x:int, y:int): Item Option =
         // We search the list for the item
         items |>
-            List.tryFind (fun item -> item.X = x && item.Y = y) |>
-            Option.defaultValue (Empty(-1,-1):>Item) // NOTE: I think we should use None to represent empty
+            List.tryFind (fun item -> item.X = x && item.Y = y)
 
     /// <summary> Adds an item to the world </summary>
     /// <param name="item"> The item to add </param>
@@ -347,8 +335,7 @@ type World (width:int, height:int) =
     /// <summary> Starts the game loop and continues until death or victory. </summary>
     /// <returns> Nothing. </returns>
     member this.Play () = 
-        let mutable newPlayerPos = (player.X,player.Y)
-        
+
         let mutable gameOver = false
         let mutable roundCount = 0
 
@@ -385,28 +372,24 @@ type World (width:int, height:int) =
             newPlayerPos <- (newPlayerPos |> fst |> clamp 0 (width-1), newPlayerPos |> snd |> clamp 0 (height-1))
 
             //Moves Zombies
-            items |> List.iter (fun item -> if item :? Zombie then item.MoveZ(player, items, roundCount, width, height))
+            items |> List.iter (fun item -> item.MoveZ(player, items, roundCount, width, height))
                     
 
             // Make sure the new player position isn't within a solid item
             let item = this.GetItem(fst newPlayerPos, snd newPlayerPos) // Item at the new position
-            if not (item.FullyOccupy()) then
+            if item.IsNone || not (item.Value.FullyOccupy()) then
                 player.MoveTo(fst newPlayerPos, snd newPlayerPos)
-
-            item.InteractWith(player)
-
-            //Checks if Item should be removed or not
-            if item.ReplaceAfterInteract() then 
-                this.RemoveItem(item)
+            if item.IsSome then 
+                item.Value.InteractWith(player)  
+                //Checks if Item should be removed or not
+                if item.Value.ReplaceAfterInteract() then this.RemoveItem(item.Value)
+                
 
             // Render
             render ()
 
-            items |> List.iter (fun item -> if item :? Zombie then printfn "%A" (System.Math.Abs (player.X - item.X)))
-            let r = System.Random()
-            printf "%A" (r.Next(-1, 2))
             // Check if game has ended
-            if ((this.GetItem(player.X, player.Y)).isExit() && player.HitPoints() >= 10) then 
+            if ((this.GetItem(player.X, player.Y)).IsSome && (this.GetItem(player.X, player.Y)).Value.isExit() && player.HitPoints() >= 10) then 
                 gameOver <- true
                 System.Console.Clear()
                 printfn "You Escaped! Well Done!"
