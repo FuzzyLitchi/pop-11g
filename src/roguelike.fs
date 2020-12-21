@@ -389,7 +389,7 @@ type World (width:int, height:int) =
             render ()
 
             // Check if game has ended
-            if ((this.GetItem(player.X, player.Y)).IsSome && (this.GetItem(player.X, player.Y)).Value.isExit() && player.HitPoints() >= 10) then 
+            if ((this.GetItem(player.X, player.Y)).IsSome && (this.GetItem(player.X, player.Y)).Value.isExit() && player.HitPoints() >= 5) then 
                 gameOver <- true
                 System.Console.Clear()
                 printfn "You Escaped! Well Done!"
