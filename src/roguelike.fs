@@ -63,15 +63,7 @@ type Canvas(rows:int,cols:int) =
 [<AbstractClass>]
 type Entity(x:int, y:int) =
     /// This entities' position
-    abstract Position : (int*int) with get, set
-    default val Position = (x,y) with get, set
-
-    /// <summary> Renders this enitity </summary>
-    /// <param name="canvas"> The canvas to render the entity onto. </param>
-    /// <returns> Nothing </returns>
-    abstract member RenderOn: Canvas -> unit
-    default this.RenderOn (canvas:Canvas) = ()
-
+    member val Position = (x,y) with get, set
     member this.X = fst this.Position
     member this.Y = snd this.Position
 
@@ -80,6 +72,13 @@ type Entity(x:int, y:int) =
     /// <param name="y"> The desired y-coordinate. </param>
     /// <returns> Nothing </returns>
     member this.MoveTo(x:int,y:int) = this.Position <- (x,y)
+
+    /// <summary> Renders this enitity </summary>
+    /// <param name="canvas"> The canvas to render the entity onto. </param>
+    /// <returns> Nothing </returns>
+    abstract member RenderOn: Canvas -> unit
+    default this.RenderOn (canvas:Canvas) = ()
+
 
 /// The player.
 /// There should be only one player in our world.
