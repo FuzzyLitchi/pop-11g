@@ -2,14 +2,6 @@ module roguelike
 
 type Color = System.ConsoleColor
 
-/// <summary> Function to print show a given point in the console </summary>
-/// <param> a Point (System.Char*Color*Color) </param>
-/// <returns> unit </returns>
-let PrintPoint ((c,fg,bg)) = 
-    System.Console.ForegroundColor <- fg
-    System.Console.BackgroundColor <- bg
-    printf "%c" c
-
 /// A canvas to render our entities with.
 /// <summary> Creates a canvas to show grapics in Console. </summary>
 /// <param name="rows"> The desired amount of rows. </param>
@@ -29,7 +21,7 @@ type Canvas(rows:int,cols:int) =
     /// <param name="x"> x-coordinate of the point. </param>
     /// <param name="y"> y-coordinate of the point. </param>
     /// <param name="c"> The character to show. </param>
-    /// <param name="fg"> Foregound color </param>
+    /// <param name="fg"> Background color </param>
     /// <param name="bg"> Background color. </param>
     /// <returns> unit </returns>
     member this.Set(x:int,y:int,c:char,fg:Color,bg:Color) = 
@@ -38,11 +30,67 @@ type Canvas(rows:int,cols:int) =
     /// <summary> Shows this Canvas in the console and resets color afterwards. Uses PrintPoint. </summary>
     /// <returns> unit </returns>
     member this.Show () =
-        System.Console.Clear()
+        /// <summary>
+        ///  Converts a color type into an ANSI color code
+        ///  See: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+        /// </summary>
+        /// <param name="color"> Foregound color </param>
+        /// <returns> Foreground color ANSI color code </returns>
+        let ansiColorFg (color: Color): int =
+            match color with
+            | Color.Black -> 30
+            | Color.Blue -> 94
+            | Color.Cyan -> 96
+            | Color.Gray -> 90
+            | Color.Green -> 92
+            | Color.Magenta -> 95
+            | Color.Red -> 91
+            | Color.White -> 97
+            | Color.Yellow -> 93
+            | Color.DarkBlue -> 34
+            | Color.DarkCyan -> 36
+            | Color.DarkGray -> 90 // I'm not sure what to translate this color into
+            | Color.DarkGreen -> 32
+            | Color.DarkMagenta -> 35
+            | Color.DarkRed -> 31
+            | Color.DarkYellow -> 33
+            | _ -> 31
+
+        /// <summary>
+        ///  Converts a color type into an ANSI color code
+        ///  See: https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+        /// </summary>
+        /// <param name="color"> Background color </param>
+        /// <returns> Background color ANSI color code </returns>
+        let ansiColorBg (color: Color): int =
+            match color with
+            | Color.Black -> 40
+            | Color.Blue -> 104
+            | Color.Cyan -> 106
+            | Color.Gray -> 100
+            | Color.Green -> 102
+            | Color.Magenta -> 105
+            | Color.Red -> 101
+            | Color.White -> 107
+            | Color.Yellow -> 103
+            | Color.DarkBlue -> 44
+            | Color.DarkCyan -> 46
+            | Color.DarkGray -> 100 // I'm not sure what to translate this color into
+            | Color.DarkGreen -> 42
+            | Color.DarkMagenta -> 45
+            | Color.DarkRed -> 41
+            | Color.DarkYellow -> 43
+            | _ -> 41
+
+        let mutable out = new System.Text.StringBuilder()
         for y in [0..this.Cols-1] do
-            printf "\n"
-            for x in [0..this.Rows-1] do 
-                PrintPoint (Array2D.get xy x y)
+            for x in [0..this.Rows-1] do
+                let (c, fg, bg) = Array2D.get xy x y
+                out.Append (sprintf "\x1B[%d;%dm%c" (ansiColorFg fg) (ansiColorBg bg) c) |> ignore
+            out.Append "\n" |> ignore
+
+        System.Console.Clear()
+        System.Console.Write(out)
         System.Console.ResetColor()
 
 /// An entity in our world.
