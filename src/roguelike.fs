@@ -303,7 +303,7 @@ type World (width:int, height:int) =
         items <- List.Empty
 
         let lines = System.IO.File.ReadLines ("levels/" + name)
-        // Width is the
+        // Width is equal to the amount of characters on a line
         width <- lines |> Seq.head |> String.length
         let mutable y = 0
 
@@ -328,8 +328,9 @@ type World (width:int, height:int) =
 
             y <- y + 1
 
-        // Update canvas size
+        // Update canvas and world size
         canv <- Canvas (width,y)
+        height <- y
 
     /// <summary> Starts the game loop and continues until death or victory. </summary>
     /// <returns> Nothing. </returns>

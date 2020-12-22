@@ -1,0 +1,16 @@
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+X  WWWW  X                   X
+X  W W   X     V    V        X
+X   P    X              V    X
+X        X             X     X
+XXXXVVXXXX             X     X
+X        X             X     X
+XFFFF FFFX             X     E
+XF    F      Z         X     E
+XF FFF  F              X     X
+XF     FF        Z     XXXXXXX
+XFFFFFFF                     X
+X             Z              X
+X                            X
+X           Z          Z     X
+XXXXXXXXXXXXXXXXXXXXXXXXXXXXXX

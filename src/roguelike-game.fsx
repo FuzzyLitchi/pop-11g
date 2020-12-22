@@ -1,6 +1,6 @@
 open roguelike
 
-let W = World(50, 25)
+let W = World(1, 1)
 
-W.OpenLevel("ZombieLand.txt")
+W.OpenLevel("main.txt")
 W.Play()
